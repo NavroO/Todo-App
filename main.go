@@ -9,11 +9,15 @@ import (
 	"eventbus/internal/models"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/go-playground/validator/v10"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
 
-var db *gorm.DB
+var (
+	db       *gorm.DB
+	validate = validator.New()
+)
 
 func getNotes(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
@@ -36,6 +40,11 @@ func addNote(w http.ResponseWriter, r *http.Request) {
 		} else {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 		}
+		return
+	}
+
+	if err := validate.Struct(data); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
@@ -75,6 +84,11 @@ func updateNote(w http.ResponseWriter, r *http.Request) {
 		} else {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 		}
+		return
+	}
+
+	if err := validate.Struct(data); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
