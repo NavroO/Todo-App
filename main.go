@@ -6,23 +6,17 @@ import (
 	"net/http"
 	"strconv"
 
+	"eventbus/internal/models"
+
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
 
 var db *gorm.DB
 
-type Note struct {
-	gorm.Model
-	Name   string `json:"name"`
-	IsDone bool   `json:"is_done"`
-}
-
-var notes []*Note
-
 func getNote(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	var notes []Note
+	var notes []models.Note
 	if err := db.Find(&notes).Error; err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -38,7 +32,7 @@ func addNote(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var data Note
+	var data models.Note
 	if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
 		if err == io.EOF {
 			http.Error(w, "Empty body", http.StatusBadRequest)
@@ -76,7 +70,7 @@ func deleteNote(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := db.Delete(&Note{}, id).Error; err != nil {
+	if err := db.Delete(&models.Note{}, id).Error; err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -90,8 +84,7 @@ func updateNote(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-
-	var data Note
+	var data models.Note
 	if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
 		if err == io.EOF {
 			http.Error(w, "Empty body", http.StatusBadRequest)
@@ -101,16 +94,22 @@ func updateNote(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	for _, note := range notes {
-		if note.ID == data.ID {
-			note.Name = data.Name
-			note.IsDone = data.IsDone
-			break
-		}
+	var note models.Note
+	if err := db.First(&note, data.ID).Error; err != nil {
+		http.Error(w, "Note not found", http.StatusNotFound)
+		return
+	}
+
+	note.Name = data.Name
+	note.IsDone = data.IsDone
+
+	if err := db.Save(&note).Error; err != nil {
+		http.Error(w, "Failed to update note", http.StatusInternalServerError)
+
+		return
 	}
 
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(notes)
 }
 
 func main() {
@@ -119,7 +118,7 @@ func main() {
 	if err != nil {
 		panic("failed to connect database")
 	}
-	db.AutoMigrate(&Note{})
+	db.AutoMigrate(&models.Note{}, &models.User{})
 
 	http.HandleFunc("/", getNote)
 	http.HandleFunc("/addNote", addNote)
