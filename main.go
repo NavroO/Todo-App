@@ -8,13 +8,14 @@ import (
 
 	"eventbus/internal/models"
 
+	"github.com/go-chi/chi/v5"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
 
 var db *gorm.DB
 
-func getNote(w http.ResponseWriter, r *http.Request) {
+func getNotes(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	var notes []models.Note
 	if err := db.Find(&notes).Error; err != nil {
@@ -27,10 +28,6 @@ func getNote(w http.ResponseWriter, r *http.Request) {
 
 func addNote(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
 
 	var data models.Note
 	if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
@@ -53,16 +50,7 @@ func addNote(w http.ResponseWriter, r *http.Request) {
 func deleteNote(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
-	if r.Method != http.MethodDelete {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	idStr := r.URL.Query().Get("id")
-	if idStr == "" {
-		http.Error(w, "Missing id parameter", http.StatusBadRequest)
-		return
-	}
+	idStr := chi.URLParam(r, "noteID")
 
 	id, err := strconv.Atoi(idStr)
 	if err != nil {
@@ -80,10 +68,6 @@ func deleteNote(w http.ResponseWriter, r *http.Request) {
 
 func updateNote(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	if r.Method != http.MethodPatch {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
 	var data models.Note
 	if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
 		if err == io.EOF {
@@ -120,9 +104,16 @@ func main() {
 	}
 	db.AutoMigrate(&models.Note{}, &models.User{})
 
-	http.HandleFunc("/", getNote)
-	http.HandleFunc("/addNote", addNote)
-	http.HandleFunc("/deleteNote", deleteNote)
-	http.HandleFunc("/updateNote", updateNote)
-	http.ListenAndServe(":8080", nil)
+	r := chi.NewRouter()
+
+	r.Route("/notes", func(r chi.Router) {
+		r.Post("/", addNote)
+		r.Get("/", getNotes)
+		r.Route("/{noteID}", func(r chi.Router) {
+			r.Delete("/", deleteNote)
+			r.Patch("/", updateNote)
+		})
+	})
+
+	http.ListenAndServe(":8080", r)
 }
